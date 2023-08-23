@@ -1,0 +1,69 @@
+---
+title: "GC_recruits"
+author: "GGG"
+date: "2023-02-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(dbplyr)
+library(vegan)
+library(rstatix)
+```
+
+```{r}
+gc_recruitment <- read.csv("~/Documents/github/Grand_Cayman_Meso/Recruit_Data.csv")
+head(gc_recruitment)
+```
+
+```{r}
+
+shapiro.test((gc_recruitment$Recruits_number))
+```
+```{r}
+kruskal_test(data = gc_recruitment, Depth~Recruits_number)
+```
+```{r}
+install.packages("ggbeeswarm")
+```
+
+```{r}
+library(ggbeeswarm)
+recruit_box <- ggplot(data = gc_recruitment, aes(x=as.character(Depth), y=(Recruits_number), fill = as.character(Depth))) + geom_boxplot() + theme_classic()+ labs(y = "Mean No Recruits", x="Depth (m)")  + geom_beeswarm() +theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12))  + theme(legend.position = "none") + scale_fill_brewer(palette = "Paired")
+recruit_box 
+```
+```{r}
+ggsave(plot = recruit_box, filename = "Recruitment Boxplot.png", device = "png", width = 4.5, height = 4, dpi = 400) 
+```
+```{r}
+install.packages("ggpmisc")
+```
+```{r}
+library(dbplyr)
+library(ggpmisc)
+```
+```{r}
+
+recruit_reg <- ggplot(data = gc_recruitment, aes(x = Algea_cover., y = ((Recruits_number)))) + geom_smooth(method='lm',formula=y~x) + stat_poly_eq(formula = (y)~x, 
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), label.x.npc = "left", label.y.npc = 0.9, 
+                parse = TRUE, size = 5) + stat_fit_glance(formula = (log(y))~x, aes(label = paste("P = ", signif(..p.value.., digits = 3), sep = "")), label.x.npc = "left", label.y.npc = 0.35, size = 5, face = "italics") + geom_point()  + theme_classic() + xlab("Algal Density") + ylab("Mean Recruitment") + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) 
+recruit_reg
+```
+```{r}
+
+recruit_reg2 <- ggplot(data = gc_recruitment, aes(x = Adult_coral., y = ((Recruits_number)))) + geom_smooth(method='glm',formula=y~x) + stat_poly_eq(formula = (y)~x, 
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), label.x.npc = "left", label.y.npc = 0.9, 
+                parse = TRUE, size = 5) + stat_fit_glance(formula = (log(y))~x, aes(label = paste("P = ", signif(..p.value.., digits = 3), sep = "")), label.x.npc = "left", label.y.npc = 0.35, size = 5, face = "italics") + geom_point()  + theme_classic() + xlab("Algal Density") + ylab("Mean Recruitment") + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) 
+recruit_reg2
+```
+
