@@ -1,0 +1,343 @@
+---
+title: "12_mile_fish"
+author: "GGG"
+date: "2023-08-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(dbplyr)
+library(vegan)
+library(rstatix)
+```
+
+
+```{r}
+fish_raw <- read.csv("~/Documents/github/12_Mile/12Mile_fish.csv")
+head(fish_raw)
+```
+```{r}
+fish <- fish_raw %>% mutate("transect" = as.character(transect))
+fish
+```
+Now need to filter the data. First we will create a new matrix that sums individual species density and biomass by transect.
+
+```{r}
+transect_fish <- fish %>% group_by(site, orientation, month, observer, transect, fish_spp) %>% summarise(total_den = sum(count), total_bio = sum(biomass))
+head(transect_fish)
+```
+Now we have to simplify by getting the total number of all fish per transect at each site. Here we also calculate species richness as the number of unique species and diversity using the Shannon Weaver index. With this we are counting each transect as a unique replicate. 
+```{r}
+fish_sum <- transect_fish %>% group_by(site, orientation, month, observer, transect) %>% summarise(sum_biomass = sum(total_bio), sum_density = sum(total_den), richness = n_distinct(fish_spp), diversity = diversity(total_den, "shannon"))
+head(fish_sum)
+
+```
+Now we test for equal variance with a shapiro wilks test
+```{r}
+shapiro.test(log(fish_sum$sum_biomass))
+```
+```{r}
+shapiro.test(((fish_sum$sum_density)))
+```
+```{r}
+shapiro.test(((fish_sum$richness)))
+```
+```{r}
+shapiro.test(((fish_sum$diversity)))
+```
+All data met the assumption, except biomass which was log transformed
+
+Next will do a full 2-way anova by site and month.
+
+```{r}
+install.packages("lme4")
+library(lme4)
+```
+
+```{r}
+den_mixed = aov((sum_density) ~ orientation * month, data = fish_sum)
+tukey_hsd(den_mixed)
+summary(den_mixed)
+```
+```{r}
+bio_mixed = aov(log(sum_biomass) ~ orientation * month, data = fish_sum)
+tukey_hsd(bio_mixed)
+summary(bio_mixed)
+```
+```{r}
+rich_mixed = aov(log(richness) ~ orientation * month, data = fish_sum)
+tukey_hsd(rich_mixed)
+summary(rich_mixed)
+```
+
+```{r}
+div_mixed = aov((diversity) ~ orientation * month, data = fish_sum)
+tukey_hsd(div_mixed)
+summary(div_mixed)
+```
+
+
+```{r}
+
+fish_box_bio <- ggplot(data = fish_sum, aes(x=orientation, y=(sum_biomass)/1000, fill = month), color = "black") + geom_boxplot()  + theme_classic()+ labs(y = "Mean Biomass (g/60m^2)")  + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12)) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(legend.position = "right") + scale_fill_brewer(palette = "Set1")
+fish_box_bio
+```
+*Looking at this graph is becomes clear that it is not a valid comparison to look at the month of the survey because there were no surveys conducted in the south in May and no surveys conducted in the center in August. Thus we could only really compare between seasons for the sites on the north and have to exclude the surveys from the south and the center. I will do this comparison last. 
+
+So now I will redo the ANOVA test based only on orientation
+
+```{r}
+den_mixed = aov((sum_density) ~ orientation, data = fish_sum)
+tukey_hsd(den_mixed)
+summary(den_mixed)
+```
+```{r}
+bio_mixed = aov(log(sum_biomass) ~ orientation, data = fish_sum)
+tukey_hsd(bio_mixed)
+summary(bio_mixed)
+```
+```{r}
+rich_mixed = aov((richness) ~ orientation, data = fish_sum)
+tukey_hsd(rich_mixed)
+summary(rich_mixed)
+```
+
+```{r}
+div_mixed = aov((diversity) ~ orientation, data = fish_sum)
+tukey_hsd(div_mixed)
+summary(div_mixed)
+```
+For all parameters except diversity, the south side is different from the north. (Previously separated our sites that were closer to the north center from the north edge and the result was the same - center and north did not differ)
+
+Next we will make the box plots by orientation for these summed parameters
+
+```{r}
+
+fish_box_bio <- ggplot(data = fish_sum, aes(x=orientation, y=(sum_biomass)/1000, fill = orientation), color = "black") + geom_boxplot()  + theme_classic()+ labs(y = "Mean Biomass (g/60m^2)")  + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12)) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(legend.position = "none") + scale_fill_brewer(palette = "Set1")
+fish_box_bio
+```
+
+```{r}
+ggsave(plot = fish_box_bio, filename = "12Mile Biomass Boxplot.png", device = "png", width = 4.5, height = 4, dpi = 400 )
+```
+
+```{r}
+
+fish_box_div <- ggplot(data = fish_sum, aes(x=orientation, y=(diversity), fill = orientation), color = "black") + geom_boxplot()  + theme_classic()+ labs(y = "Mean Diversity (Shannon-Weaver)")  + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12)) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(legend.position = "none") + scale_fill_brewer(palette = "Set1")
+fish_box_div
+```
+```{r}
+ggsave(plot = fish_box_div, filename = "12Mile Diversity Boxplot.png", device = "png", width = 4.5, height = 4, dpi = 400 )
+```
+```{r}
+
+fish_box_den <- ggplot(data = fish_sum, aes(x=orientation, y=(sum_density), fill = orientation), color = "black") + geom_boxplot()  + theme_classic()+ labs(y = "Mean Density (no/60m^2)")  + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12)) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(legend.position = "none") + scale_fill_brewer(palette = "Set1")
+fish_box_den
+```
+```{r}
+ggsave(plot = fish_box_den, filename = "12 Mile Density Boxplot.png", device = "png", width = 4.5, height = 4, dpi = 400 )
+```
+
+```{r}
+
+fish_box_rich <- ggplot(data = fish_sum, aes(x=orientation, y=(richness), fill = orientation), color = "black") + geom_boxplot() + theme_classic()+ labs(y = "Mean Richness (no species/60m^2)")  + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=12)) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(legend.position = "none") + scale_fill_brewer(palette = "Set1")
+fish_box_rich
+```
+```{r}
+ggsave(plot = fish_box_rich, filename = "12 MileRichness Boxplot.png", device = "png", width = 4.5, height = 4, dpi = 400 )
+```
+
+
+Let's start with contribution of each family over time. 
+
+So we need to sum biomass and density for each family by transect  
+
+```{r}
+
+fish_family <- fish %>% group_by(site, orientation, observer, transect, common_family) %>% summarise(total_biomass = sum(biomass), total_density = sum(count)) 
+head(fish_family) 
+```
+
+```{r}
+grouper <- fish_family %>% filter(common_family == c("grouper"))
+ggplot(data = grouper, aes(x = orientation, y = total_density, fill = orientation)) + geom_bar(stat = "summary", fun.y = "mean", position = "dodge", color = "black") + stat_summary(geom = "errorbar", fun.data = mean_se, position = "dodge") + labs(y = "Mean Number of Grouper Per Transect", x = "Survey Location")+ theme_classic() + theme(legend.position = "None") + theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust=1), axis.title = element_text(size = 14)) + scale_fill_brewer(palette = "YlOrBr")
+```
+
+```{r}
+ggplot(data = grouper, aes(x = orientation, y = total_biomass, fill = orientation)) + geom_bar(stat = "summary", fun.y = "mean", position = "dodge", color = "black") + stat_summary(geom = "errorbar", fun.data = mean_se) + labs(y = "Mean Biomass of Grouper (g Per Transect)", x = "Survey Location")+ theme_classic() + theme(legend.position = "None") + theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust=1), axis.title = element_text(size = 14)) + scale_fill_brewer(palette = "PuBu")
+```
+
+Heatmaps
+```{r}
+fish_family_mean <- fish_family %>% group_by(site, orientation, common_family) %>% summarise(mean_biomass = mean(total_biomass), mean_density = mean(total_density)) %>% group_by(orientation, common_family) %>% summarise(mean_biomass = mean(mean_biomass), mean_density = mean(mean_density))
+head(fish_family_mean)
+```
+```{r}
+mean_freq  <-   fish_family_mean %>%  group_by (orientation) %>% mutate("mean_bio_perc" = mean_biomass/sum(mean_biomass)*100, "mean_den_perc" = mean_density/sum(mean_density)*100) 
+head(mean_freq)
+```
+```{r}
+heatmap_freq_bio <- ggplot(data = mean_freq, aes(x = as.character(orientation), y = common_family)) + geom_tile(aes(y = reorder(common_family, mean_bio_perc, median, order = TRUE), fill = mean_bio_perc), color = "black", width = 0.85) +
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Oranges")) +
+  ylab("Common Family") + scale_x_discrete(name = "Survey Orientation") +
+  theme(axis.text.y = element_text(face = "italic")) +
+  labs(fill = "Mean % Biomass", title = "") + theme_classic() + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(axis.text.y = element_text(face = "italic"))
+heatmap_freq_bio
+
+```
+```{r}
+freq_bio_bar <- ggplot(data = mean_freq, aes(x= mean_bio_perc, y = common_family)) + geom_bar(aes(y=reorder(common_family, mean_bio_perc, mean, order = TRUE)), stat = "summary", fun.y = "mean", position = "dodge", color = "black", fill = "darkgoldenrod2") + stat_summary(geom = "errorbar", fun.data = mean_se) + labs(x = "Mean % Biomass per Family", y = "Common Family Name")+ theme_classic() + theme(legend.position = "None") + theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust=1), axis.title = element_text(size = 14))  + theme(axis.text.y = element_text(face = "italic")) + facet_grid(.~orientation)
+freq_bio_bar
+
+```
+```{r}
+freq_den_bar <- ggplot(data = mean_freq, aes(x= mean_den_perc, y = common_family)) + geom_bar(aes(y=reorder(common_family, mean_den_perc, mean, order = TRUE)), stat = "summary", fun.y = "mean", position = "dodge", color = "black", fill = "steelblue") + stat_summary(geom = "errorbar", fun.data = mean_se) + labs(x = "Mean % Density per Family", y = "Common Family Name")+ theme_classic() + theme(legend.position = "None") + theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust=1), axis.title = element_text(size = 14))  + theme(axis.text.y = element_text(face = "italic")) + facet_grid(.~orientation)
+freq_den_bar
+
+```
+```{r}
+ggsave(filename = "Family_bar_density.png", plot = freq_den_bar, device = "png",width = 8,height = 6,dpi = 600)
+
+```
+
+```{r}
+heatmap_freq_den <- ggplot(data = mean_freq, aes(x = orientation, y = common_family)) + geom_tile(aes(y = reorder(common_family, mean_den_perc, mean, order = TRUE), fill = mean_den_perc), color = "black", width = 0.85) +
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues")) + scale_x_discrete(name = "")+
+  ylab("") +
+  theme(axis.text.y = element_text(face = "italic")) +
+  labs(fill = "Mean % Density", title = "")   + theme_classic() + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(axis.text.y = element_text(face = "italic"))
+heatmap_freq_den
+```
+```{r}
+
+fish_spp <- fish %>% group_by(site, orientation, survey, observer, transect, common_family, fish_spp) %>% summarise(total_biomass = sum(biomass), total_density = sum(count)) 
+head(fish_spp) 
+```
+
+```{r}
+sapply(fish_spp, function(fish_spp) n_distinct(fish_spp))
+```
+
+
+```{r}
+fish_spp_mean <- fish_spp %>% group_by(site, survey, orientation, common_family, fish_spp) %>% summarise(mean_biomass = mean(total_biomass), mean_density = mean(total_density), n=n()) %>%
+    mutate(fish_spp = str_replace(fish_spp, "_", " "))
+head(fish_spp_mean)
+```
+```{r}
+mean_freq_spp  <-   fish_spp_mean %>%  group_by (site, orientation, survey) %>% mutate("mean_bio_perc" = mean_biomass/sum(mean_biomass)*100, "mean_den_perc" = mean_density/sum(mean_density)*100) 
+head(mean_freq_spp)
+```
+
+```{r}
+matrix_den <- fish_spp %>% group_by(survey, fish_spp, transect) %>% summarise(avg_den = mean(total_density))
+head(matrix_den)
+matrix_wide_den <- spread(matrix_den, fish_spp, avg_den) %>% mutate_all(~replace(., is.na(.), 0))
+matrix_wide_den
+```
+```{r}
+sac_raw <- matrix_wide_den %>%
+  # Remove site decsription variables 
+  dplyr::select(-c(survey, transect)) %>%
+  # Compute SAC
+  vegan::poolaccum(.)
+```
+
+
+```{r}
+obs <- data.frame(summary(sac_raw)$S, check.names = FALSE)
+colnames(obs) <- c("N", "S", "lower2.5", "higher97.5", "std")
+head(obs)
+```
+
+```{r}
+obs %>%
+  ggplot(data = ., aes(x = N,
+                       y = S)) +
+  # Add confidence intervals
+  geom_ribbon(aes(ymin = lower2.5,
+                  ymax = higher97.5),
+              alpha = 0.5,
+              colour = "goldenrod2", fill = "goldenrod1") +
+  # Add observed richness line 
+  geom_line(color = "goldenrod3") +
+  labs(x = "No. of Surveys",
+       y = "Observed Richness",
+       ) + theme_classic() +theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=16,face="bold"))
+```
+
+
+```{r}
+ggsave(filename = "Species_accummulation_curve.png", device = "png",width = 8,height = 6,dpi = 600)
+
+```
+
+```{r}
+heatmap_freq_spp <- ggplot(data = mean_freq_spp, aes(x = as.character(orientation), y = fish_spp)) + geom_tile(aes(y = reorder(fish_spp, mean_den_perc, mean, order = TRUE), fill = mean_den_perc), color = "black", width = 0.85) +
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues")) +
+  ylab("Species") +
+  xlab("Survey Location") +  
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic")) +
+  labs(fill = "Mean % Density", title = "Mean Percent Frequency per Family")   + theme_classic() + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(axis.text.y = element_text(face = "italic"))
+heatmap_freq_spp
+```
+
+```{r}
+ggsave(filename = "Heatmap_density_spp.png", plot = heatmap_freq_spp, device = "png",width = 8,height = 20,dpi = 600)
+
+```
+```{r}
+
+
+heatmap_freq_spp2 <- ggplot(data = mean_freq_spp, aes(y = (site), x = fish_spp)) + geom_tile(aes(x = reorder(fish_spp, mean_den_perc, mean, order = TRUE), fill = mean_den_perc), color = "black", width = 0.95) +
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(6, "Oranges")) +
+  labs(fill = "%") + theme_void() + annotate(x="",y=1:mean_freq_spp$survey, label=unique(mean_freq_spp$survey),size=4,geom="text", color = "black", size = 16)+ coord_polar(start=0.15) + 
+theme(legend.position = "bottom",legend.key.size = unit(0.5, "cm")) + theme(
+    # Remove axis ticks and text
+    axis.title = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.y = element_blank(),
+    # Use gray text for the region names
+    axis.text.x = element_text(color = "black", size = 18)) + theme(axis.text.x = element_text(face = "italic", size = 28)) 
+    # Move the legend to the bottom
+    
+heatmap_freq_spp2
+```
+
+```{r}
+ggsave(filename = "spiral_spp_den2.png", plot = heatmap_freq_spp2, device = "png",width = 40,height = 40,dpi = 600)
+
+```
+```{r}
+heatmap_freq_spp3 <- ggplot(data = mean_freq_spp, aes(x = site, y = fish_spp)) + geom_tile(aes(y = reorder(fish_spp, mean_den_perc, mean, order = TRUE), fill = mean_den_perc), color = "black", width = 0.85) +
+  scale_fill_gradientn(colours = RColorBrewer::brewer.pal(9, "Blues")) +
+  ylab("Species") +
+  xlab("Survey Location") +  
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic")) +
+  labs(fill = "Mean % Denisty", title = "Mean Percent Frequency per Family")   + theme_classic() + theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold")) + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(axis.text.y = element_text(face = "italic"))
+heatmap_freq_spp3
+```
+
+```{r}
+ggsave(filename = "Heatmap_density_spp_site.png", plot = heatmap_freq_spp3, device = "png",width = 8,height = 24,dpi = 600)
+
+```
